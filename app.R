@@ -414,7 +414,7 @@ ui <- fluidPage(
 
             tags$h4("Dry weight vs. fresh (marketable) yield"),
             tags$p(
-              "The fitted models predict ", tags$code("DW_roots"), ", storage-root ", tags$b("dry"), " weight ",
+              "The fitted models predict storage-root ", tags$b("dry"), " weight ",
               "in t/ha -- not what gets harvested or sold. The app also shows an estimated ", tags$b("fresh"),
               " weight, dividing by each cultivar's dry-matter fraction (dry weight / fresh weight), sourced ",
               "where possible from published cultivar-release literature rather than guessed:"

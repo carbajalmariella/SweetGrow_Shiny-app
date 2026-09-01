@@ -1,7 +1,9 @@
 .DS_Store
 .RData
 .Rhistory
-.Rproj.user/
-cache/
+.Rproj.user
+cache
 inst/model_catalog_OLD_backup.rds
-rsconnect/
+tests
+run_tests.R
+rsconnect
