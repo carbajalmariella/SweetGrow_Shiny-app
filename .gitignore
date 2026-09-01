@@ -1,0 +1,6 @@
+.DS_Store
+.RData
+.Rhistory
+.Rproj.user/
+cache/
+inst/model_catalog_OLD_backup.rds
