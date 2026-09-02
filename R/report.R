@@ -26,7 +26,7 @@ explain_plain_language <- function(res) {
   final_fw <- pred$pred_fw[which.max(pred$date)]
   yield_txt <- if (!is.null(final_fw) && !is.na(final_fw)) {
     sprintf(
-      "That's roughly %.2f t/ha of estimated fresh (marketable) yield, converted from dry weight using this cultivar's dry-matter fraction (published where available, otherwise this trial's own estimate) -- a rougher approximation than the growth curve itself (see Methodology & Notes).",
+      "That's roughly %.2f t/ha of estimated fresh (marketable) yield, converted from dry weight using this cultivar's dry-matter fraction (published where available, otherwise this trial's own estimate) -- a rougher approximation than the growth curve itself (see Methodology).",
       final_fw
     )
   } else {
