@@ -10,6 +10,13 @@ library(zoo)
 library(slider)
 library(sf)
 library(soilDB)
+# soilDB only lists xml2 under Suggests (an optional dep it uses internally
+# to parse SSURGO/SDA responses), so rsconnect's dependency scanner won't
+# bundle it unless the app itself references it directly -- without this,
+# SSURGO silently fails on shinyapps.io ("please install the xml2 package")
+# and every US soil lookup falls through to the slower, less reliable
+# SoilGrids fallback.
+library(xml2)
 library(glue)
 library(DT)
 library(leaflet)
