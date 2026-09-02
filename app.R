@@ -244,7 +244,7 @@ ui <- fluidPage(
       conditionalPanel(
         condition = "input.show_advanced == true",
         helpText("Override the trial calibration, model family, or water-stress curve. Everything else stays",
-                 " fixed to the manuscript's settings -- see Methodology & Notes.")
+                 " fixed to the manuscript's settings -- see Methodology.")
       ),
 
       conditionalPanel(
@@ -400,6 +400,17 @@ ui <- fluidPage(
               "source. The pooled \"Seasons 2021-2022\" fit under the logistic model specifically is flagged by ",
               "the underlying analysis as a non-reproduced approximation."
             ),
+            tags$p(
+              tags$b("These two stress mechanisms are not equivalent, and can disagree substantially: "),
+              "piecewise slows down the developmental \"clock\" itself -- under stress, GDD_eff accumulates ",
+              "slower than real GDD_cum, so the plant can stay longer in its early, slow-growth phase. Logistic ",
+              "keeps the true GDD_cum clock and instead throttles the daily growth rate at whatever developmental ",
+              "stage the plant has actually reached. Under real water stress this means piecewise can predict ",
+              "noticeably lower final dry weight than logistic for the exact same weather/soil scenario -- that's ",
+              "a structural difference between the two models, not an error in either one, and it's most visible ",
+              "when comparing them under stressed (rainfed) conditions; under little or no stress, both approaches ",
+              "converge much closer together."
+            ),
 
             tags$h4("Uncertainty band"),
             tags$p(
@@ -502,6 +513,22 @@ server <- function(input, output, session) {
     }
   })
 
+  # Opening Advanced used to silently jump the "Trial site/year" dropdown to
+  # its fixed default (the pooled "Seasons 2021-2022" fit) even if the last
+  # run had auto-picked a real trial (Caswell/Sandhills) by matching the
+  # scenario's own WSI -- so the very act of looking at Advanced changed
+  # which calibration was in effect, with no indication that happened. Sync
+  # the dropdown to whatever was actually auto-selected instead, so opening
+  # Advanced shows (and continues using) what's already driving the current
+  # results, rather than resetting it.
+  observeEvent(input$show_advanced, {
+    req(isTRUE(input$show_advanced))
+    res <- tryCatch(isolate(results()), error = function(e) NULL)
+    if (!is.null(res) && isTRUE(res$season_auto_selected)) {
+      updateSelectInput(session, "season", selected = res$season_used)
+    }
+  })
+
   output$bellevue_warning_ui <- renderUI({
     req(input$cultivar)
     if (!identical(input$cultivar, "Bellevue")) return(NULL)
@@ -537,7 +564,14 @@ server <- function(input, output, session) {
         "Fit vs GDD_eff, which accumulates GDD_cum increments scaled by fw(WSI)."
       )
     }
-    tagList(approach_txt, pooled_logistic_warning)
+    mechanism_note <- tags$div(
+      style = "font-size: 12px; color: #555; margin-top: 6px;",
+      tags$b("Comparing model types? "),
+      "piecewise slows its own developmental clock under stress (GDD_eff), while logistic keeps the real clock ",
+      "(GDD_cum) and throttles growth rate instead -- under real water stress these can disagree substantially on ",
+      "final yield. That's a structural difference, not an error -- see Methodology for details."
+    )
+    tagList(approach_txt, mechanism_note, pooled_logistic_warning)
   })
 
   output$fw_eqn_ui <- renderUI({
