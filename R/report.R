@@ -4,7 +4,13 @@
 
 # Translates the numeric run outputs into a short, non-technical explanation
 # a grower/extension agent can read without knowing what GDD or WSI mean.
-explain_plain_language <- function(res) {
+# dw_conv/dw_unit_lab and fw_conv/fw_unit_lab default to identity/t/ha so
+# this stays callable without a live Shiny session (e.g. from
+# render_report()'s own env). Dry weight and the estimated fresh/marketable
+# weight get separate unit converters -- see the comment above dw_conv/
+# fw_conv in app.R for why (bushels only make sense for fresh weight).
+explain_plain_language <- function(res, dw_conv = identity, dw_unit_lab = function() "t/ha",
+                                    fw_conv = identity, fw_unit_lab = function() "t/ha") {
   df <- res$df
   pred <- res$pred
 
@@ -20,14 +26,15 @@ explain_plain_language <- function(res) {
     "The crop experienced substantial water stress for a large part of the season -- available soil water was frequently low, which is expected to reduce storage root growth compared to a well-watered scenario."
   }
 
-  final_pred <- pred$pred[which.max(pred$date)]
-  final_lower <- pred$pred_lower[which.max(pred$date)]
-  final_upper <- pred$pred_upper[which.max(pred$date)]
-  final_fw <- pred$pred_fw[which.max(pred$date)]
+  unit_lab <- dw_unit_lab()
+  final_pred <- dw_conv(pred$pred[which.max(pred$date)])
+  final_lower <- dw_conv(pred$pred_lower[which.max(pred$date)])
+  final_upper <- dw_conv(pred$pred_upper[which.max(pred$date)])
+  final_fw <- fw_conv(pred$pred_fw[which.max(pred$date)])
   yield_txt <- if (!is.null(final_fw) && !is.na(final_fw)) {
     sprintf(
-      "That's roughly %.2f t/ha of estimated fresh (marketable) yield, converted from dry weight using this cultivar's dry-matter fraction (published where available, otherwise this trial's own estimate) -- a rougher approximation than the growth curve itself (see Methodology).",
-      final_fw
+      "That's roughly %s %s of estimated fresh (marketable) yield, converted from dry weight using this cultivar's dry-matter fraction (published where available, otherwise this trial's own estimate) -- a rougher approximation than the growth curve itself (see Methodology).",
+      format_precision(final_fw), fw_unit_lab()
     )
   } else {
     NULL
@@ -35,13 +42,13 @@ explain_plain_language <- function(res) {
   uncertainty_txt <- if (!is.na(final_lower) && !is.na(final_upper)) {
     if (isTRUE(res$band_is_bootstrap)) {
       sprintf(
-        "The harvest-day prediction has a 50%% bootstrap uncertainty range (interquartile) of %.2f to %.2f (from 40 resampled refits of the fitted model).",
-        final_lower, final_upper
+        "The harvest-day prediction has a 50%% bootstrap uncertainty range (interquartile) of %s to %s (from 40 resampled refits of the fitted model).",
+        format_precision(final_lower), format_precision(final_upper)
       )
     } else {
       sprintf(
-        "The harvest-day prediction has a rough uncertainty range of %.2f to %.2f, based on how uncertain the fitted model's own parameters are -- not a full statistical prediction interval, just an approximate envelope.",
-        final_lower, final_upper
+        "The harvest-day prediction has a rough uncertainty range of %s to %s, based on how uncertain the fitted model's own parameters are -- not a full statistical prediction interval, just an approximate envelope.",
+        format_precision(final_lower), format_precision(final_upper)
       )
     }
   } else {
@@ -74,7 +81,7 @@ explain_plain_language <- function(res) {
 
   htmltools::tags$div(
     htmltools::tags$ul(
-      htmltools::tags$li(sprintf("Predicted storage root dry weight at harvest: %.2f t/ha.", final_pred)),
+      htmltools::tags$li(sprintf("Predicted storage root dry weight at harvest: %s %s.", format_precision(final_pred), unit_lab)),
       if (!is.null(bellevue_txt)) htmltools::tags$li(bellevue_txt),
       if (!is.null(yield_txt)) htmltools::tags$li(yield_txt),
       if (!is.null(uncertainty_txt)) htmltools::tags$li(uncertainty_txt),
@@ -90,7 +97,8 @@ explain_plain_language <- function(res) {
 }
 
 # Renders the HTML report to a temp file and returns its path.
-render_report <- function(results, input_snapshot, out_file) {
+render_report <- function(results, input_snapshot, out_file, dw_conv = identity, dw_unit_lab = function() "t/ha",
+                           fw_conv = identity, fw_unit_lab = function() "t/ha") {
   rmarkdown::render(
     input = "inst/report_template.Rmd",
     output_file = out_file,
@@ -99,7 +107,7 @@ render_report <- function(results, input_snapshot, out_file) {
       climate_summary_tbl = input_snapshot$climate_summary_tbl,
       soil_profile_tbl = input_snapshot$soil_profile_tbl,
       soil_agg_tbl = input_snapshot$soil_agg_tbl,
-      plain_language_html = explain_plain_language(results),
+      plain_language_html = explain_plain_language(results, dw_conv, dw_unit_lab, fw_conv, fw_unit_lab),
       equation = attr(results$pred, "equation"),
       pred_plot = input_snapshot$pred_plot,
       pred_tbl = input_snapshot$pred_tbl

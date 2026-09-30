@@ -161,9 +161,9 @@ ui <- fluidPage(
       )
     ),
     column(3, style = "padding-top: 22px; text-align: right;",
-      radioButtons("temp_unit", "Temperature unit",
-                   choices = setNames(c("C", "F"), paste0(DEG, c("C", "F"))),
-                   selected = "C", inline = TRUE)
+      radioButtons("unit_system", "Units",
+                   choices = c("US" = "english", "Metric" = "metric"),
+                   selected = "english", inline = TRUE)
     )
   ),
   fluidRow(
@@ -197,7 +197,7 @@ ui <- fluidPage(
       hr(style = "margin: 10px 0;"),
       h4("Dates"),
       fluidRow(
-        column(6, dateInput("planting_date", "Planting date", value = as.Date("2024-06-01"))),
+        column(6, dateInput("planting_date", "Planting date", value = as.Date(paste0(format(Sys.Date(), "%Y"), "-06-01")))),
         column(6,
           conditionalPanel(
             condition = "input.harvest_spec_type == 'date'",
@@ -480,6 +480,25 @@ server <- function(input, output, session) {
     })
   }
 
+  # Single Units toggle drives temperature, yield, and water-depth display
+  # together (US: F / lbs-acre / bu-acre / in -- Metric: C / t-ha / mm).
+  # Reads the live input (not a value captured at Run time) so switching
+  # updates every display immediately.
+  # Dry weight (the model's actual predicted quantity) converts to lbs/acre,
+  # a plain mass unit valid regardless of dry vs. fresh. Bushels (50-lb, the
+  # sweetpotato industry's own convention) are reserved for the estimated
+  # fresh/marketable weight line, since a "bushel of dry matter" isn't a real
+  # unit anyone uses -- applying it to DW would look like a marketable-yield
+  # bushel count when it isn't one.
+  is_english <- function() identical(input$unit_system, "english")
+  temp_unit_r <- function() if (is_english()) "F" else "C"
+  dw_unit_lab <- function() if (is_english()) "lbs/acre" else "t/ha"
+  dw_conv <- function(x) if (is_english()) t_ha_to_lb_ac(x) else x
+  fw_unit_lab <- function() if (is_english()) "bu/acre" else "t/ha"
+  fw_conv <- function(x) if (is_english()) t_ha_to_bu_ac(x) else x
+  water_unit_lab <- function() if (is_english()) "in" else "mm"
+  water_conv <- function(x) if (is_english()) mm_to_in(x) else x
+
   output$map <- renderLeaflet({
     leaflet() %>%
       addTiles() %>%
@@ -694,8 +713,8 @@ server <- function(input, output, session) {
 
     df0 <- clim %>%
       mutate(
-        tmax_in = if (input$temp_unit == "F") c_to_f(tmax_c) else tmax_c,
-        tmin_in = if (input$temp_unit == "F") c_to_f(tmin_c) else tmin_c
+        tmax_in = if (temp_unit_r() == "F") c_to_f(tmax_c) else tmax_c,
+        tmin_in = if (temp_unit_r() == "F") c_to_f(tmin_c) else tmin_c
       )
 
     irr <- irrigation_series_r()
@@ -720,7 +739,7 @@ server <- function(input, output, session) {
       filter(date >= as.Date(input$planting_date), date <= harvest_date) %>%
       arrange(date)
 
-    df_gdd <- compute_gdd2(df, temp_unit = input$temp_unit) %>%
+    df_gdd <- compute_gdd2(df, temp_unit = temp_unit_r()) %>%
       mutate(DAT = as.integer(date - as.Date(input$planting_date)))
 
     # PWL (piecewise) was fit against Kc-adjusted ET; LGG (logistic) against
@@ -832,14 +851,16 @@ server <- function(input, output, session) {
     date_90  <- planting + 90
     harvest  <- harvest_date_r()
 
+    w_lab <- water_unit_lab()
+    y_lab <- dw_unit_lab()
     kv_table(list(
-      "Total precipitation (mm)" = sum(df$precip_mm, na.rm = TRUE),
-      "Total irrigation (mm)"    = sum(df$irrigation_mm, na.rm = TRUE),
-      "Total ET (mm)"            = sum(df$ET, na.rm = TRUE),
+      "Total precipitation" = sprintf("%s %s", format_precision(water_conv(sum(df$precip_mm, na.rm = TRUE))), w_lab),
+      "Total irrigation"    = sprintf("%s %s", format_precision(water_conv(sum(df$irrigation_mm, na.rm = TRUE))), w_lab),
+      "Total ET"            = sprintf("%s %s", format_precision(water_conv(sum(df$ET, na.rm = TRUE))), w_lab),
       "GDD (cumulative) at harvest (deg C-days)" = max(df$GDD_cum, na.rm = TRUE),
       "Effective GDD (cumulative) at harvest (deg C-days)"  = max(df$GDD_eff, na.rm = TRUE),
-      "Prediction at 90 DAT (t/ha)"     = pick_pred_at_date(pred, date_90),
-      "Prediction at harvest (t/ha)"    = pick_pred_at_date(pred, harvest)
+      "Prediction at 90 DAT"     = sprintf("%s %s", format_precision(dw_conv(pick_pred_at_date(pred, date_90))), y_lab),
+      "Prediction at harvest"    = sprintf("%s %s", format_precision(dw_conv(pick_pred_at_date(pred, harvest))), y_lab)
     ), digits = 2)
   })
 
@@ -880,8 +901,12 @@ server <- function(input, output, session) {
     req(results())
     x_var <- results()$x_used
     planting <- as.Date(input$planting_date)
+    unit_lab <- dw_unit_lab()
     df <- results()$pred %>%
-      mutate(Date = as.Date(date), DAT = as.integer(Date - planting), GDD = .data[[x_var]], DW = pred)
+      mutate(
+        Date = as.Date(date), DAT = as.integer(Date - planting), GDD = .data[[x_var]],
+        DW = dw_conv(pred), pred_lower = dw_conv(pred_lower), pred_upper = dw_conv(pred_upper)
+      )
     x_lab <- if (x_var == "GDD_eff") "Effective GDD (cumulative)" else "GDD (cumulative)"
     has_band <- !all(is.na(df$pred_lower))
     band_subtitle <- if (!has_band) {
@@ -905,7 +930,7 @@ server <- function(input, output, session) {
           labels = function(v) as.character(round(v))
         )
       ) +
-      labs(y = "Root dry weight (t/ha)", title = "Model prediction over time", subtitle = band_subtitle) +
+      labs(y = paste0("Root dry weight (", unit_lab, ")"), title = "Model prediction over time", subtitle = band_subtitle) +
       theme_gray(base_size = 15) +
       theme(
         axis.title = element_text(size = 15),
@@ -917,15 +942,21 @@ server <- function(input, output, session) {
   pred_tbl_r <- reactive({
     req(results())
     planting <- as.Date(input$planting_date)
+    dw_col <- paste0("DW ", dw_unit_lab())
+    fw_col <- paste0("FW ", fw_unit_lab(), " (est.)")
     results()$pred %>%
       mutate(DAT = as.integer(as.Date(date) - planting)) %>%
+      mutate(
+        pred = dw_conv(pred), pred_lower = dw_conv(pred_lower), pred_upper = dw_conv(pred_upper),
+        pred_fw = fw_conv(pred_fw), pred_fw_lower = fw_conv(pred_fw_lower), pred_fw_upper = fw_conv(pred_fw_upper)
+      ) %>%
       select(date, DAT, pred, pred_lower, pred_upper, pred_fw, pred_fw_lower, pred_fw_upper,
              GDD_cum, GDD_eff, WSI) %>%
       mutate(date = as.Date(date)) %>%
       mutate(date = format(date, "%Y-%m-%d")) %>%
       rename(
-        `DW t/ha` = pred, `DW lower` = pred_lower, `DW upper` = pred_upper,
-        `FW t/ha (est.)` = pred_fw, `FW lower` = pred_fw_lower, `FW upper` = pred_fw_upper,
+        !!dw_col := pred, `DW lower` = pred_lower, `DW upper` = pred_upper,
+        !!fw_col := pred_fw, `FW lower` = pred_fw_lower, `FW upper` = pred_fw_upper,
         `GDD (cumulative)` = GDD_cum, `Effective GDD (cumulative)` = GDD_eff
       ) %>%
       mutate(across(where(is.numeric), fmt2))
@@ -936,7 +967,7 @@ server <- function(input, output, session) {
   # -----------------------
   output$explain_ui <- renderUI({
     req(results())
-    HTML(explain_plain_language(results()))
+    HTML(explain_plain_language(results(), dw_conv, dw_unit_lab, fw_conv, fw_unit_lab))
   })
   output$tbl_climate_summary <- renderTable(climate_summary_tbl_r(), rownames = FALSE)
   output$tbl_soil_profile <- renderTable(soil_profile_tbl_r(), rownames = FALSE)
@@ -951,12 +982,12 @@ server <- function(input, output, session) {
     # C/F updates the plot immediately -- safe because tmax_c/tmin_c (the
     # raw Celsius NASA POWER pulled) are already fetched and just need a
     # unit conversion for display, no new data/Run required.
-    unit_lab <- paste0(DEG, if (input$temp_unit == "F") "F" else "C")
+    unit_lab <- paste0(DEG, if (temp_unit_r() == "F") "F" else "C")
     df <- results()$df %>%
       mutate(
         GDD = GDD_cum,
-        Tmax = if (input$temp_unit == "F") c_to_f(tmax_c) else tmax_c,
-        Tmin = if (input$temp_unit == "F") c_to_f(tmin_c) else tmin_c
+        Tmax = if (temp_unit_r() == "F") c_to_f(tmax_c) else tmax_c,
+        Tmin = if (temp_unit_r() == "F") c_to_f(tmin_c) else tmin_c
       )
     p <- ggplot(df, aes(x = GDD)) +
       geom_line(aes(y = Tmax, color = "Maximum temperature")) +
@@ -971,13 +1002,14 @@ server <- function(input, output, session) {
 
   output$p_water_et <- renderPlotly({
     req(results())
-    df <- results()$df %>% mutate(GDD = GDD_cum, `Water input` = water, ET_mm = ET)
+    w_lab <- water_unit_lab()
+    df <- results()$df %>% mutate(GDD = GDD_cum, `Water input` = water_conv(water), ET_mm = water_conv(ET))
     p <- ggplot(df, aes(x = GDD)) +
       geom_col(aes(y = `Water input`, fill = "Water input (rain + irrigation)"), alpha = 0.6) +
       geom_line(aes(y = ET_mm, color = "Evapotranspiration (ET)"), linewidth = 0.8) +
       scale_fill_manual(name = NULL, values = c("Water input (rain + irrigation)" = "#5dade2")) +
       scale_color_manual(name = NULL, values = c("Evapotranspiration (ET)" = "#e67e22")) +
-      labs(x = "GDD (cumulative)", y = "mm/day", title = "Daily Water Input and Evapotranspiration")
+      labs(x = "GDD (cumulative)", y = paste0(w_lab, "/day"), title = "Daily Water Input and Evapotranspiration")
     y_ref <- mean(range(c(df$`Water input`, df$ET_mm), na.rm = TRUE))
     # ggplotly mangles trace names into "(label,1)" when a plot mixes a fill
     # legend (bars) and a color legend (line) -- clean them back up.
@@ -991,7 +1023,7 @@ server <- function(input, output, session) {
     req(results())
     results()$df %>%
       select(date, tmax_c, tmin_c, precip_mm, irrigation_mm, et_mm) %>%
-      format_dt(temp_unit = input$temp_unit)
+      format_dt(temp_unit = temp_unit_r(), water_unit = water_unit_lab())
   })
   make_table_widget("tbl_clim", clim_tbl_r)
 
@@ -1029,8 +1061,12 @@ server <- function(input, output, session) {
 
   gdd_tbl_r <- reactive({
     req(results())
+    w_lab <- water_unit_lab()
+    water_col <- paste0("Water input (", w_lab, ")")
+    et_col <- paste0("ET (", w_lab, ")")
     results()$df %>%
       select(date, gdd, GDD_cum, GDD_eff, water, ET, WSI) %>%
+      mutate(water = water_conv(water), ET = water_conv(ET)) %>%
       mutate(date = as.Date(date)) %>%
       mutate(date = format(date, "%Y-%m-%d")) %>%
       mutate(across(where(is.numeric), fmt2)) %>%
@@ -1038,8 +1074,8 @@ server <- function(input, output, session) {
         `GDD (daily)` = gdd,
         `GDD (cumulative)` = GDD_cum,
         `Effective GDD (cumulative)` = GDD_eff,
-        `Water input (mm)` = water,
-        `ET (mm)` = ET
+        !!water_col := water,
+        !!et_col := ET
       )
   })
   make_table_widget("tbl_gdd", gdd_tbl_r)
@@ -1066,21 +1102,29 @@ server <- function(input, output, session) {
       mutate(Date = as.Date(date), DAT = as.integer(Date - planting), GDD = .data[[x_var]])
     ggplotly(pred_plot_r(), tooltip = c("x", "y")) %>%
       layout(legend = list(orientation = "h", y = -0.2)) %>%
-      add_dat_axis(x = df$GDD, dat = df$DAT, y_ref = mean(range(df$pred, na.rm = TRUE)))
+      add_dat_axis(x = df$GDD, dat = df$DAT, y_ref = mean(range(dw_conv(df$pred), na.rm = TRUE)))
   })
 
   output$pred_caption_ui <- renderUI({
     req(results())
     res <- results()
     pred <- res$pred
-    final_dw <- pred$pred[which.max(pred$date)]
-    final_fw <- pred$pred_fw[which.max(pred$date)]
-    fw_txt <- if (!is.na(final_fw)) sprintf(" (~%.1f t/ha estimated fresh/marketable weight)", final_fw) else ""
+    unit_lab <- dw_unit_lab()
+    final_dw <- dw_conv(pred$pred[which.max(pred$date)])
+    final_fw <- fw_conv(pred$pred_fw[which.max(pred$date)])
+    lo <- dw_conv(pred$pred_lower[which.max(pred$date)])
+    hi <- dw_conv(pred$pred_upper[which.max(pred$date)])
+    range_txt <- if (!is.na(lo) && !is.na(hi)) {
+      sprintf(" (50%% range: %s–%s)", format_precision(lo), format_precision(hi))
+    } else {
+      ""
+    }
+    fw_txt <- if (!is.na(final_fw)) sprintf(" (~%s %s estimated fresh/marketable weight)", format_precision(final_fw), fw_unit_lab()) else ""
     tags$p(
       style = "font-size:14px; color:#444; margin-top:4px;",
       sprintf(
-        "Predicted for %s under this scenario: %.1f t/ha dry weight at harvest%s, using the %s calibration.",
-        input$cultivar, final_dw, fw_txt, res$season_used
+        "Predicted for %s under this scenario: %s %s%s dry weight at harvest%s, using the %s calibration.",
+        input$cultivar, format_precision(final_dw), unit_lab, range_txt, fw_txt, res$season_used
       )
     )
   })
@@ -1089,11 +1133,12 @@ server <- function(input, output, session) {
     req(results())
     res <- results()
     pred <- res$pred
-    final_dw <- pred$pred[which.max(pred$date)]
-    final_fw <- pred$pred_fw[which.max(pred$date)]
-    lo <- pred$pred_lower[which.max(pred$date)]
-    hi <- pred$pred_upper[which.max(pred$date)]
-    band_label <- if (isTRUE(res$band_is_bootstrap)) "50% bootstrap range (DW)" else "Rough envelope (DW)"
+    unit_lab <- dw_unit_lab()
+    final_dw <- dw_conv(pred$pred[which.max(pred$date)])
+    final_fw <- fw_conv(pred$pred_fw[which.max(pred$date)])
+    lo <- dw_conv(pred$pred_lower[which.max(pred$date)])
+    hi <- dw_conv(pred$pred_upper[which.max(pred$date)])
+    band_label <- if (isTRUE(res$band_is_bootstrap)) sprintf("50%% bootstrap range (DW, %s)", unit_lab) else sprintf("Rough envelope (DW, %s)", unit_lab)
 
     rows <- list(
       "Planting date" = as.Date(input$planting_date),
@@ -1102,11 +1147,11 @@ server <- function(input, output, session) {
       "Irrigation"    = irrigation_desc_r(),
       "Cultivar" = input$cultivar,
       "Growth calibration" = res$season_used,
-      "Predicted dry weight at harvest (t/ha)" = final_dw,
-      "Estimated fresh/marketable weight at harvest (t/ha)" = final_fw
+      "Predicted dry weight at harvest" = sprintf("%s %s", format_precision(final_dw), unit_lab),
+      "Estimated fresh/marketable weight at harvest" = if (!is.na(final_fw)) sprintf("%s %s", format_precision(final_fw), fw_unit_lab()) else NA_character_
     )
     if (!is.na(lo) && !is.na(hi)) {
-      rows[[band_label]] <- sprintf("%.2f - %.2f", lo, hi)
+      rows[[band_label]] <- sprintf("%s - %s", format_precision(lo), format_precision(hi))
     }
     kv_table(rows, digits = 2)
   })
@@ -1134,7 +1179,7 @@ server <- function(input, output, session) {
         pred_plot = pred_plot_r(),
         pred_tbl = pred_tbl_r()
       )
-      render_report(results(), snap, file)
+      render_report(results(), snap, file, dw_conv, dw_unit_lab, fw_conv, fw_unit_lab)
     }
   )
 }
