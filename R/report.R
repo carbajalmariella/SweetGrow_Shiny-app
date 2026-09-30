@@ -55,6 +55,18 @@ explain_plain_language <- function(res, dw_conv = identity, dw_unit_lab = functi
     NULL
   }
 
+  # The point prediction (the single published model fit) and the bootstrap
+  # band (the 25th-75th percentile of 40 separately-refit curves) come from
+  # two different procedures, so the point isn't guaranteed to land inside
+  # its own band -- only worth a note when it actually happens.
+  band_mismatch_txt <- if (isTRUE(res$band_is_bootstrap) && !is.na(final_pred) &&
+                            !is.na(final_lower) && !is.na(final_upper) &&
+                            (final_pred < final_lower || final_pred > final_upper)) {
+    "Note: the prediction above falls outside that range because it comes from a different source than the band -- the single published model fit, not the center of the 40-refit bootstrap ensemble. Both are statistically valid; they just don't always agree, especially for a weakly-constrained fit."
+  } else {
+    NULL
+  }
+
   soil_txt <- sprintf(
     "Soil water-holding was estimated between a wilting point of %.2f and a field capacity of %.2f (fraction of soil volume that is water), using a %.0f cm rooting depth and a bulk density of %.2f g/cm3 -- source: %s.",
     res$soil_agg$SLLL, res$soil_agg$SDUL, res$root_depth, res$soil_agg$bulk_density_g_cm3, res$soil_agg$soil_source
@@ -85,6 +97,7 @@ explain_plain_language <- function(res, dw_conv = identity, dw_unit_lab = functi
       if (!is.null(bellevue_txt)) htmltools::tags$li(bellevue_txt),
       if (!is.null(yield_txt)) htmltools::tags$li(yield_txt),
       if (!is.null(uncertainty_txt)) htmltools::tags$li(uncertainty_txt),
+      if (!is.null(band_mismatch_txt)) htmltools::tags$li(style = "color:#8a6100;", band_mismatch_txt),
       htmltools::tags$li(sprintf(
         "Water stress index averaged %.2f over the season (1.0 = no stress, 0 = maximum stress); it dropped as low as %.2f on the driest days, with %d day(s) below the 0.8 comfort threshold.",
         wsi_mean, wsi_min, stress_days
