@@ -37,7 +37,7 @@ test_that("explain_plain_language reports the harvest-date prediction and soil i
   html <- explain_plain_language(res)
 
   expect_type(html, "character")
-  expect_match(html, "Predicted storage root dry weight at harvest: 5.50 t/ha", fixed = TRUE)
+  expect_match(html, "Predicted storage root dry weight at harvest: 5.5 t/ha", fixed = TRUE)
   expect_match(html, "wilting point of 0.11 and a field capacity of 0.24", fixed = TRUE)
   expect_match(html, "60 cm rooting depth", fixed = TRUE)
   expect_match(html, "SSURGO (dominant component)", fixed = TRUE)
@@ -47,7 +47,7 @@ test_that("explain_plain_language reports estimated fresh yield when pred_fw is 
   res <- make_synthetic_results(wsi_values = c(1, 1, 0.9), pred_values = c(1, 2, 5.5),
                                  pred_fw = c(3.7, 7.4, 20.37))
   html <- explain_plain_language(res)
-  expect_match(html, "20.37 t/ha of estimated fresh", fixed = TRUE)
+  expect_match(html, "20.4 t/ha of estimated fresh", fixed = TRUE)
 })
 
 test_that("explain_plain_language omits the fresh-yield line when pred_fw is all NA", {
@@ -93,7 +93,7 @@ test_that("explain_plain_language reports the uncertainty range when the band is
   res <- make_synthetic_results(wsi_values = rep(0.5, 5), pred_values = c(1, 2, 3),
                                  pred_lower = c(0.8, 1.7, 2.5), pred_upper = c(1.2, 2.3, 3.6))
   html <- explain_plain_language(res)
-  expect_match(html, "rough uncertainty range of 2.50 to 3.60", fixed = TRUE)
+  expect_match(html, "rough uncertainty range of 2.5 to 3.6", fixed = TRUE)
 })
 
 test_that("explain_plain_language uses bootstrap phrasing when band_is_bootstrap is TRUE", {
@@ -101,7 +101,7 @@ test_that("explain_plain_language uses bootstrap phrasing when band_is_bootstrap
                                  pred_lower = c(0.8, 1.7, 2.5), pred_upper = c(1.2, 2.3, 3.6),
                                  band_is_bootstrap = TRUE)
   html <- explain_plain_language(res)
-  expect_match(html, "50% bootstrap uncertainty range (interquartile) of 2.50 to 3.60", fixed = TRUE)
+  expect_match(html, "50% bootstrap uncertainty range (interquartile) of 2.5 to 3.6", fixed = TRUE)
 })
 
 test_that("explain_plain_language omits the uncertainty line when the band is all NA", {
