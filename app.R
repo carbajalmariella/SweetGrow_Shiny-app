@@ -55,6 +55,7 @@ DEG  <- intToUtf8(176)   # deg sign, as in 16.9 C
 SUP2 <- intToUtf8(178)   # superscript 2, as in R-squared
 GEQ  <- intToUtf8(8805)  # >=
 WARN_SIGN <- intToUtf8(9888) # warning triangle
+EN_DASH   <- intToUtf8(8211) # used in "lo-hi" ranges
 
 # ============================================================
 # Backend constants -- not user-facing. These were choices made once
@@ -1115,7 +1116,7 @@ server <- function(input, output, session) {
     lo <- dw_conv(pred$pred_lower[which.max(pred$date)])
     hi <- dw_conv(pred$pred_upper[which.max(pred$date)])
     range_txt <- if (!is.na(lo) && !is.na(hi)) {
-      sprintf(" (50%% range: %s–%s)", format_precision(lo), format_precision(hi))
+      sprintf(" (50%% range: %s%s%s)", format_precision(lo), EN_DASH, format_precision(hi))
     } else {
       ""
     }

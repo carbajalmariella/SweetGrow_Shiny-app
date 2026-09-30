@@ -7,3 +7,4 @@ inst/model_catalog_OLD_backup.rds
 tests
 run_tests.R
 rsconnect
+.claude
