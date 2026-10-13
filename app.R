@@ -341,7 +341,7 @@ ui <- fluidPage(
             tags$h4("Reference"),
             tags$p(
               "Carbajal, M., Weidner, D., Huseth, A., Hoogenboom, G., Raymundo, R., Williams, C., and Nelson, N. ",
-              tags$em("How effectively can an intermediate modeling approach predict the growth and development of sweetpotatoes?"),
+              tags$em("How effectively can piecewise linear and logistic growth models predict sweetpotato storage root growth?"),
               " (manuscript in preparation)."
             ),
 

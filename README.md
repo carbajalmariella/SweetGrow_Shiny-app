@@ -8,7 +8,7 @@ Sweetpotato storage-root dry weight (growth) predictor.
 
 Given a location, planting date, cultivar, and irrigation scenario, SweetGrow pulls live weather (NASA POWER) and soil data (SSURGO in the US, SoilGrids elsewhere) and predicts storage-root dry weight over time, along with an estimated fresh/marketable weight, growing degree days (GDD), and a water stress index (WSI).
 
-Growth curves were fit offline on two NC State research trials (Caswell 2021, Sandhills 2022); see the in-app **Methodology** tab for the model equations, calibration details, and known limitations. Reference: Carbajal, M., Weidner, D., Huseth, A., Hoogenboom, G., Raymundo, R., Williams, C., and Nelson, N., *How effectively can an intermediate modeling approach predict the growth and development of sweetpotatoes?* (manuscript in preparation).
+Growth curves were fit offline on two NC State research trials (Caswell 2021, Sandhills 2022); see the in-app **Methodology** tab for the model equations, calibration details, and known limitations. Reference: Carbajal, M., Weidner, D., Huseth, A., Hoogenboom, G., Raymundo, R., Williams, C., and Nelson, N., *How effectively can piecewise linear and logistic growth models predict sweetpotato storage root growth?* (manuscript in preparation).
 
 ## Running locally
 
